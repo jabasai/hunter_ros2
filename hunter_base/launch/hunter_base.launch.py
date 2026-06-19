@@ -21,6 +21,8 @@ def generate_launch_description():
                                                 description='Base link frame id')
     odom_topic_arg = DeclareLaunchArgument('odom_topic_name', default_value='odom',
                                            description='Odometry topic name')
+    cmd_vel_topic_arg = DeclareLaunchArgument('cmd_vel_topic', default_value='/cmd_vel',
+                                              description='Command velocity topic remapped to hunter_base /cmd_vel subscription')
     robot_model_arg = DeclareLaunchArgument('robot_model', default_value='hunter2',
                                            description='robot_model')
 
@@ -44,7 +46,10 @@ def generate_launch_description():
                 'control_rate': launch.substitutions.LaunchConfiguration('control_rate'),
                 'robot_model': launch.substitutions.LaunchConfiguration('robot_model'),
 
-        }])
+        }],
+        remappings=[
+            ('/cmd_vel', launch.substitutions.LaunchConfiguration('cmd_vel_topic')),
+        ])
 
     return LaunchDescription([
         use_sim_time_arg,
@@ -52,6 +57,7 @@ def generate_launch_description():
         odom_frame_arg,
         base_link_frame_arg,
         odom_topic_arg,
+        cmd_vel_topic_arg,
         simulated_robot_arg,
         sim_control_rate_arg,
         robot_model_arg,
