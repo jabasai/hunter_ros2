@@ -61,6 +61,7 @@ class HunterMessenger {
   void SetOdometryFrame(std::string frame) { odom_frame_ = frame; }
   void SetBaseFrame(std::string frame) { base_frame_ = frame; }
   void SetOdometryTopicName(std::string name) { odom_topic_name_ = name; }
+  void SetPublishOdometryTF(bool publish) { publish_odom_tf_ = publish; }
   void SetWeelbase(float Weelbase){
     l = Weelbase;
   }
@@ -80,7 +81,9 @@ class HunterMessenger {
 
   void SetupSubscription() {
     // odometry publisher
-    tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
+    if (publish_odom_tf_) {
+      tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
+    }
     odom_pub_ =
         node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name_, 50);
     status_pub_ = node_->create_publisher<hunter_msgs::msg::HunterStatus>(
@@ -168,6 +171,7 @@ class HunterMessenger {
   std::string odom_topic_name_;
 
   bool simulated_robot_ = false;
+  bool publish_odom_tf_ = true;
   int sim_control_rate_ = 50;
 
   westonrobot::SystemPropagator<BicycleKinematics> model_;
@@ -292,7 +296,9 @@ class HunterMessenger {
     tf_msg.transform.translation.z = 0.0;
     tf_msg.transform.rotation = odom_quat;
 
-    tf_broadcaster_->sendTransform(tf_msg);
+    if (publish_odom_tf_) {
+      tf_broadcaster_->sendTransform(tf_msg);
+    }
 
     // publish odometry and tf messages
     nav_msgs::msg::Odometry odom_msg;

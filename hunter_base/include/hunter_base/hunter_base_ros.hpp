@@ -20,34 +20,32 @@
 namespace westonrobot {
 class HunterBaseRos : public rclcpp::Node {
  public:
-  HunterBaseRos(std::string node_name);
+	HunterBaseRos(std::string node_name);
 
-  bool Initialize();
-  void Run();
-  void Stop();
+	bool Initialize();
+	void Run();
+	void Stop();
 
  private:
-  
-  std::string port_name_;
-  std::string odom_frame_;
-  std::string base_frame_;
-  std::string odom_topic_name_;
-  std::string robot_model_;
+	std::string port_name_;
+	std::string odom_frame_;
+	std::string base_frame_;
+	std::string odom_topic_name_;
+	std::string robot_model_;
 
-  bool is_hunter_mini_ = false;
-  bool is_omni_wheel_ = false;
+	bool is_hunter_mini_ = false;
+	bool is_omni_wheel_ = false;
+	bool simulated_robot_ = false;
+	bool publish_odom_tf_ = true;
+	int sim_control_rate_ = 50;
 
-  bool simulated_robot_ = false;
-  int sim_control_rate_ = 50;
-  
-  int version=2;
-  bool is_omni_ = false;
-  std::shared_ptr<HunterRobot> robot_;
-  // std::shared_ptr<HunterMiniOmniRobot> omni_robot_;
+	int version = 2;
+	bool is_omni_ = false;
+	std::shared_ptr<HunterRobot> robot_;
 
-  std::atomic<bool> keep_running_;
+	std::atomic<bool> keep_running_;
 
-  void LoadParameters();
+	void LoadParameters();
 };
 }  // namespace westonrobot
 
