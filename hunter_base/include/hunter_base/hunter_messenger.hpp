@@ -78,6 +78,9 @@ class HunterMessenger {
     simulated_robot_ = true;
     sim_control_rate_ = loop_rate;
   }
+  void SetStateGlitchFilterWindow(double seconds) {
+    state_glitch_filter_sec_ = seconds;
+  }
 
   void SetupSubscription() {
     // odometry publisher
@@ -121,9 +124,11 @@ class HunterMessenger {
     status_msg.steering_angle = phi;
     // status_msg.angular_velocity = state.motion_state.steering_angle;
 
-    status_msg.vehicle_state = state.system_state.vehicle_state;
+    FilterSystemState(state.system_state.vehicle_state,
+                      state.system_state.error_code);
+    status_msg.vehicle_state = reported_vehicle_state_;
     status_msg.control_mode = state.system_state.control_mode;
-    status_msg.error_code = state.system_state.error_code;
+    status_msg.error_code = reported_error_code_;
     status_msg.battery_voltage = state.system_state.battery_voltage;
 
     auto actuator = hunter_->GetActuatorState();
@@ -200,6 +205,69 @@ class HunterMessenger {
 
   rclcpp::Time last_time_;
   rclcpp::Time current_time_;
+
+  // While the RC signal is lost the Hunter controller reports EXCEPTION with
+  // RC_SIGNAL_LOSS, but every 2^16 status frames (~1310.7 s at 50 Hz) it
+  // briefly (~0.5 s) clears the error code and reports ESTOP before returning
+  // to EXCEPTION. Changes away from that state (other than to NORMAL) are
+  // only published once they persist for state_glitch_filter_sec_.
+  double state_glitch_filter_sec_ = 1.0;
+  bool state_initialized_ = false;
+  bool state_change_pending_ = false;
+  rclcpp::Time state_change_since_;
+  uint8_t reported_vehicle_state_ = 0;
+  uint16_t reported_error_code_ = 0;
+  uint64_t suppressed_state_glitches_ = 0;
+
+  void FilterSystemState(uint8_t vehicle_state, uint16_t error_code) {
+    if (state_glitch_filter_sec_ <= 0.0 || !state_initialized_) {
+      AcceptSystemState(vehicle_state, error_code);
+      state_initialized_ = true;
+      return;
+    }
+
+    if (vehicle_state == reported_vehicle_state_ &&
+        error_code == reported_error_code_) {
+      if (state_change_pending_) {
+        state_change_pending_ = false;
+        ++suppressed_state_glitches_;
+        RCLCPP_WARN(node_->get_logger(),
+                    "Suppressed transient Hunter state change while RC signal "
+                    "lost (vehicle_state=%u, error_code=0x%04x, %.3f s, "
+                    "total suppressed: %lu)",
+                    reported_vehicle_state_, reported_error_code_,
+                    (current_time_ - state_change_since_).seconds(),
+                    static_cast<unsigned long>(suppressed_state_glitches_));
+      }
+      return;
+    }
+
+    bool rc_loss_exception =
+        reported_vehicle_state_ == VEHICLE_STATE_EXCEPTION &&
+        (reported_error_code_ & SYSTEM_ERROR_RC_SIGNAL_LOSS_MASK);
+    if (!rc_loss_exception ||
+        vehicle_state == VEHICLE_STATE_NORMAL) {
+      AcceptSystemState(vehicle_state, error_code);
+      return;
+    }
+
+    if (!state_change_pending_) {
+      state_change_pending_ = true;
+      state_change_since_ = current_time_;
+      return;
+    }
+
+    if ((current_time_ - state_change_since_).seconds() >=
+        state_glitch_filter_sec_) {
+      AcceptSystemState(vehicle_state, error_code);
+    }
+  }
+
+  void AcceptSystemState(uint8_t vehicle_state, uint16_t error_code) {
+    reported_vehicle_state_ = vehicle_state;
+    reported_error_code_ = error_code;
+    state_change_pending_ = false;
+  }
 
   void TwistCmdCallback(const geometry_msgs::msg::Twist::SharedPtr msg) {
     

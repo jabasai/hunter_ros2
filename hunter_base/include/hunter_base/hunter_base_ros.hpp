@@ -38,6 +38,7 @@ class HunterBaseRos : public rclcpp::Node {
 	bool simulated_robot_ = false;
 	bool publish_odom_tf_ = true;
 	int sim_control_rate_ = 50;
+	double state_glitch_filter_sec_ = 1.0;
 
 	int version = 2;
 	bool is_omni_ = false;
