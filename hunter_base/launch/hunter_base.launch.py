@@ -17,6 +17,7 @@ def generate_launch_description():
 	simulated_robot = LaunchConfiguration('simulated_robot')
 	control_rate = LaunchConfiguration('control_rate')
 	publish_odom_tf = LaunchConfiguration('publish_odom_tf')
+	state_glitch_filter_sec = LaunchConfiguration('state_glitch_filter_sec')
 
 	hunter_base_node = launch_ros.actions.Node(
 		package='hunter_base',
@@ -33,6 +34,7 @@ def generate_launch_description():
 			'control_rate': control_rate,
 			'robot_model': robot_model,
 			'publish_odom_tf': publish_odom_tf,
+			'state_glitch_filter_sec': state_glitch_filter_sec,
 		}],
 		remappings=[('/cmd_vel', cmd_vel_topic)],
 	)
@@ -51,6 +53,12 @@ def generate_launch_description():
 			'publish_odom_tf',
 			default_value='true',
 			description='Whether hunter_base broadcasts odom to base TF',
+		),
+		DeclareLaunchArgument(
+			'state_glitch_filter_sec',
+			default_value='1.0',
+			description='Debounce (s) for vehicle_state/error_code changes '
+			'while the base reports RC signal loss; 0 disables',
 		),
 		hunter_base_node,
 	])
