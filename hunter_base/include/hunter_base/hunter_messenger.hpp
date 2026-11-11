@@ -10,12 +10,14 @@
 #ifndef HUNTER_MESSENGER_HPP
 #define HUNTER_MESSENGER_HPP
 
+#include <limits>
 #include <string>
 #include <mutex>
 #include <memory>
 
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <sensor_msgs/msg/battery_state.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -91,6 +93,8 @@ class HunterMessenger {
         node_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name_, 50);
     status_pub_ = node_->create_publisher<hunter_msgs::msg::HunterStatus>(
         "/hunter_status", 10);
+    bms_pub_ = node_->create_publisher<sensor_msgs::msg::BatteryState>(
+        "/hunter_bms", 10);
 
     // cmd subscriber
     motion_cmd_sub_ = node_->create_subscription<geometry_msgs::msg::Twist>(
@@ -159,6 +163,8 @@ class HunterMessenger {
 
     status_pub_->publish(status_msg);
 
+    PublishBmsStateToROS();
+
     // publish odometry and tf
     PublishOdometryToROS(state.motion_state, dt);
 
@@ -186,6 +192,8 @@ class HunterMessenger {
 
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
   rclcpp::Publisher<hunter_msgs::msg::HunterStatus>::SharedPtr status_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr bms_pub_;
+  SdkTimePoint last_bms_stamp_{};
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr motion_cmd_sub_;
   
@@ -267,6 +275,36 @@ class HunterMessenger {
     reported_vehicle_state_ = vehicle_state;
     reported_error_code_ = error_code;
     state_change_pending_ = false;
+  }
+
+  // Publishes the BMS frame (CAN 0x361) once per received frame; nothing is
+  // published before the first frame arrives.
+  void PublishBmsStateToROS() {
+    auto sensor = hunter_->GetCommonSensorState();
+    if (sensor.time_stamp == SdkTimePoint{} ||
+        sensor.time_stamp == last_bms_stamp_) {
+      return;
+    }
+    last_bms_stamp_ = sensor.time_stamp;
+
+    const auto &bms = sensor.bms_basic_state;
+    sensor_msgs::msg::BatteryState msg;
+    msg.header.stamp = current_time_;
+    msg.voltage = bms.voltage;
+    msg.current = bms.current;
+    msg.temperature = bms.temperature;
+    msg.percentage = bms.battery_soc / 100.0f;
+    msg.charge = std::numeric_limits<float>::quiet_NaN();
+    msg.capacity = std::numeric_limits<float>::quiet_NaN();
+    msg.design_capacity = std::numeric_limits<float>::quiet_NaN();
+    msg.power_supply_status =
+        sensor_msgs::msg::BatteryState::POWER_SUPPLY_STATUS_UNKNOWN;
+    msg.power_supply_health =
+        sensor_msgs::msg::BatteryState::POWER_SUPPLY_HEALTH_UNKNOWN;
+    msg.power_supply_technology =
+        sensor_msgs::msg::BatteryState::POWER_SUPPLY_TECHNOLOGY_LION;
+    msg.present = true;
+    bms_pub_->publish(msg);
   }
 
   void TwistCmdCallback(const geometry_msgs::msg::Twist::SharedPtr msg) {
