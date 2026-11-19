@@ -75,6 +75,10 @@ if(BUILD_TESTING)
   # uncomment the line when this package is not in a git repo
   #set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_wheel_calibration test/test_wheel_calibration.cpp)
+  target_include_directories(test_wheel_calibration PRIVATE include)
 endif()
 
 ament_package()

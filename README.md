@@ -77,3 +77,22 @@ Nvidia Jeston TX2/Xavier/XavierNX have CAN controller(s) integrated in the main 
 **SAFETY PRECAUSION**: 
 
 Always have your remote controller ready to take over the control whenever necessary. 
+
+## Wheel-odometry calibration
+
+`hunter_base` corrects the chassis' reported speed and steering angle with per-robot values estimated against RTK GNSS by the `jabas_calibration` service (jabas_deploy, `CALIBRATION.md`). Parameters on the node `hunter`:
+
+| Parameter | Meaning | Default |
+|---|---|---|
+| `linear_velocity_scale` | true speed = scale × reported speed | 1.0 |
+| `steering_angle_scale` | true central steering angle = scale × reported + offset | 1.0 |
+| `steering_angle_offset` | steering zero offset (rad, central angle) | 0.0 |
+| `odom_reference_offset_x` | distance (m) of `base_frame` ahead of the rear-axle centre | 0.0 |
+
+With the defaults the driver behaves exactly as before. When set:
+- **Odometry** integrates the true speed and steering, and the pose and twist are published for `base_frame`; the twist carries `vy = ω × offset`.
+- **`/cmd_vel`** is mapped through the inverse, so the commanded speed and curvature are driven.
+- **`/hunter_status`** keeps the raw chassis values.
+- **Implausible values** stop the node at startup.
+
+`hunter_base.launch.py` loads the parameters from `params_file`. Its default is `$HUNTER_BASE_PARAMS_FILE` or `/robot_configs/ros_params/hunter_base.yaml` (JABAS robot configuration), and a missing file means uncalibrated. The math lives in `include/hunter_base/wheel_calibration.hpp` and is unit-tested in `test/test_wheel_calibration.cpp` (`colcon test --packages-select hunter_base`).
