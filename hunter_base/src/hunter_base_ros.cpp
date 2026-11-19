@@ -27,6 +27,11 @@ HunterBaseRos::HunterBaseRos(std::string node_name)
 	this->declare_parameter("publish_odom_tf", rclcpp::ParameterValue(true));
 	this->declare_parameter("state_glitch_filter_sec",
 													rclcpp::ParameterValue(1.0));
+	// Wheel-odometry calibration (jabas_calibration). Defaults = uncalibrated.
+	this->declare_parameter("linear_velocity_scale", rclcpp::ParameterValue(1.0));
+	this->declare_parameter("steering_angle_scale", rclcpp::ParameterValue(1.0));
+	this->declare_parameter("steering_angle_offset", rclcpp::ParameterValue(0.0));
+	this->declare_parameter("odom_reference_offset_x", rclcpp::ParameterValue(0.0));
 
 	LoadParameters();
 }
@@ -43,6 +48,16 @@ void HunterBaseRos::LoadParameters() {
 	this->get_parameter_or<bool>("publish_odom_tf", publish_odom_tf_, true);
 	this->get_parameter_or<double>("state_glitch_filter_sec",
 																 state_glitch_filter_sec_, 1.0);
+	this->get_parameter_or<double>("linear_velocity_scale",
+																 calibration_.linear_velocity_scale, 1.0);
+	this->get_parameter_or<double>("steering_angle_scale",
+																 calibration_.steering_angle_scale, 1.0);
+	this->get_parameter_or<double>("steering_angle_offset",
+																 calibration_.steering_angle_offset, 0.0);
+	this->get_parameter_or<double>("odom_reference_offset_x",
+																 calibration_.odom_reference_offset_x, 0.0);
+	// fail at startup on an implausible calibration rather than drive with it
+	calibration_.Validate();
 
 	std::cout << "Loading parameters: " << std::endl;
 	std::cout << "- port name: " << port_name_ << std::endl;
@@ -56,6 +71,13 @@ void HunterBaseRos::LoadParameters() {
 	std::cout << "- sim control rate: " << sim_control_rate_ << std::endl;
 	std::cout << "- state glitch filter (s): " << state_glitch_filter_sec_
 						<< std::endl;
+	std::cout << "- wheel calibration: "
+						<< (calibration_.IsIdentity() ? "none (raw chassis values)" : "applied")
+						<< std::endl;
+	std::cout << "    linear_velocity_scale: " << calibration_.linear_velocity_scale << std::endl;
+	std::cout << "    steering_angle_scale: " << calibration_.steering_angle_scale << std::endl;
+	std::cout << "    steering_angle_offset (rad): " << calibration_.steering_angle_offset << std::endl;
+	std::cout << "    odom_reference_offset_x (m): " << calibration_.odom_reference_offset_x << std::endl;
 	std::cout << "----------------------------" << std::endl;
 }
 
@@ -112,6 +134,7 @@ void HunterBaseRos::Run() {
 	messenger->SetOdometryTopicName(odom_topic_name_);
 	messenger->SetPublishOdometryTF(publish_odom_tf_);
 	messenger->SetStateGlitchFilterWindow(state_glitch_filter_sec_);
+	messenger->SetWheelCalibration(calibration_);
 	if (simulated_robot_) messenger->SetSimulationMode(sim_control_rate_);
 
 	if (port_name_.find("can") != std::string::npos) {

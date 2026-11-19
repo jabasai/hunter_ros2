@@ -16,6 +16,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "ugv_sdk/mobile_robot/hunter_robot.hpp"
+#include "hunter_base/wheel_calibration.hpp"
 
 namespace westonrobot {
 class HunterBaseRos : public rclcpp::Node {
@@ -39,6 +40,7 @@ class HunterBaseRos : public rclcpp::Node {
 	bool publish_odom_tf_ = true;
 	int sim_control_rate_ = 50;
 	double state_glitch_filter_sec_ = 1.0;
+	WheelCalibration calibration_;
 
 	int version = 2;
 	bool is_omni_ = false;

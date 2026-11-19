@@ -26,6 +26,7 @@
 #include "ascent/Utility.h"
 #include "hunter_base/bicycle_model.hpp"
 #include "hunter_base/hunter_params.hpp"
+#include "hunter_base/wheel_calibration.hpp"
 
 #include "ugv_sdk/mobile_robot/hunter_robot.hpp"
 #include "ugv_sdk/utilities/protocol_detector.hpp"
@@ -82,6 +83,14 @@ class HunterMessenger {
   }
   void SetStateGlitchFilterWindow(double seconds) {
     state_glitch_filter_sec_ = seconds;
+  }
+  void SetWheelCalibration(const WheelCalibration &calibration) {
+    calibration.Validate();
+    calibration_ = calibration;
+    // start the published base frame (not the rear axle) at the odom origin
+    position_x_ = -calibration_.odom_reference_offset_x;
+    position_y_ = 0.0;
+    theta_ = 0.0;
   }
 
   void SetupSubscription() {
@@ -206,6 +215,7 @@ class HunterMessenger {
   double theta_ = 0.0;
 
   static constexpr double steer_angle_tolerance = 0.005;  // ~+-0.287 degrees
+  WheelCalibration calibration_;
   double l = 0.0;
   double w = 0.0;
   double max_steer_angle_central = 0.0;
@@ -323,11 +333,23 @@ class HunterMessenger {
 
     std::shared_ptr<HunterRobot> base;
 
-    double radian = 0;
-    double phi_i = AngelVelocity2Angel(*msg,radian);
+    double linear = msg->linear.x;
+    double phi_i = 0.0;
+    if (calibration_.IsIdentity()) {
+      // uncalibrated: original behaviour
+      double radian = 0;
+      phi_i = AngelVelocity2Angel(*msg, radian);
+    } else {
+      // calibrated: command the reported speed / steering that realise the
+      // requested true speed and curvature
+      double central = calibration_.CommandSteering(
+          msg->linear.x, msg->angular.z, l, max_steer_angle_central);
+      phi_i = ConvertCentralAngleToInner(central);
+      linear = calibration_.ReportedSpeed(msg->linear.x);
+    }
 
     std::cout << "set steering angle: " << phi_i << std::endl;
-    hunter_->SetMotionCommand(msg->linear.x, phi_i);
+    hunter_->SetMotionCommand(linear, phi_i);
     // hunter_
  
   }
@@ -375,10 +397,10 @@ class HunterMessenger {
 
   void PublishOdometryToROS(const MotionStateMessage &msg, double dt) {
     // perform numerical integration to get an estimation of pose
-    double linear_speed_ = msg.linear_velocity;
-    // double angular_speed = msg.angular_velocity;
-    double steering_angle_ = ConvertInnerAngleToCentral(msg.steering_angle);
-    // double lateral_speed = 0;
+    // reported -> true speed and central steering angle (identity by default)
+    double linear_speed_ = calibration_.TrueSpeed(msg.linear_velocity);
+    double steering_angle_ =
+        calibration_.TrueSteering(ConvertInnerAngleToCentral(msg.steering_angle));
 
     asc::state_t state =
       model_.Propagate({position_x_, position_y_, theta_},
@@ -387,6 +409,12 @@ class HunterMessenger {
     position_y_ = state[1];
     theta_ = state[2];
 
+    // The model integrates the rear-axle centre; publish the base frame,
+    // odom_reference_offset_x ahead of it (0 = rear axle, as before).
+    const double ref_x = calibration_.odom_reference_offset_x;
+    const double angular_speed = linear_speed_ / l * std::tan(steering_angle_);
+    const double base_x = position_x_ + ref_x * std::cos(theta_);
+    const double base_y = position_y_ + ref_x * std::sin(theta_);
 
     geometry_msgs::msg::Quaternion odom_quat =
         createQuaternionMsgFromYaw(theta_);
@@ -397,8 +425,8 @@ class HunterMessenger {
     tf_msg.header.frame_id = odom_frame_;
     tf_msg.child_frame_id = base_frame_;
 
-    tf_msg.transform.translation.x = position_x_;
-    tf_msg.transform.translation.y = position_y_;
+    tf_msg.transform.translation.x = base_x;
+    tf_msg.transform.translation.y = base_y;
     tf_msg.transform.translation.z = 0.0;
     tf_msg.transform.rotation = odom_quat;
 
@@ -412,14 +440,16 @@ class HunterMessenger {
     odom_msg.header.frame_id = odom_frame_;
     odom_msg.child_frame_id = base_frame_;
 
-    odom_msg.pose.pose.position.x = position_x_;
-    odom_msg.pose.pose.position.y = position_y_;
+    odom_msg.pose.pose.position.x = base_x;
+    odom_msg.pose.pose.position.y = base_y;
     odom_msg.pose.pose.position.z = 0.0;
     odom_msg.pose.pose.orientation = odom_quat;
 
+    // body-frame twist of the base frame: a point ahead of the rear axle
+    // moves sideways at w * ref_x in a turn
     odom_msg.twist.twist.linear.x = linear_speed_;
-    odom_msg.twist.twist.linear.y = 0;
-    odom_msg.twist.twist.angular.z = linear_speed_ / l * std::tan(steering_angle_);
+    odom_msg.twist.twist.linear.y = angular_speed * ref_x;
+    odom_msg.twist.twist.angular.z = angular_speed;
 
     odom_msg.pose.covariance = {
     0.001,      0.0,        0.0,        0.0,        0.0,        0.0,
