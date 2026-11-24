@@ -214,7 +214,6 @@ class HunterMessenger {
   double position_y_ = 0.0;
   double theta_ = 0.0;
 
-  static constexpr double steer_angle_tolerance = 0.005;  // ~+-0.287 degrees
   WheelCalibration calibration_;
   double l = 0.0;
   double w = 0.0;
@@ -354,15 +353,19 @@ class HunterMessenger {
  
   }
 
+  // Central (bicycle-model) <-> inner front-wheel steering angle. Both are
+  // continuous through zero, with no deadband: the chassis takes and reports
+  // the angle in 1 mrad steps and each step is a real curve (1 mrad inner is
+  // a ~650 m radius). A deadband sends or integrates wide curves as straight.
   double ConvertCentralAngleToInner(double angle)
   {
     double phi = angle;
     double phi_i = 0;
-    if (phi > steer_angle_tolerance) {
+    if (phi > 0) {
       // left turn
       phi_i = std::atan(2 * l * std::sin(phi) /
                         (2 * l * std::cos(phi) - w * std::sin(phi)));
-    } else if (phi < -steer_angle_tolerance) {
+    } else if (phi < 0) {
       // right turn
       phi = -phi;
       phi_i = std::atan(2 * l * std::sin(phi) /
@@ -375,11 +378,11 @@ class HunterMessenger {
   {
     double phi = 0;
     double phi_i = angle;
-    if (phi_i > steer_angle_tolerance) {
-      // left turn
+    if (phi_i > 0) {
+      // left turn: rear-axle centre turns on radius r
       double r = l / std::tan(phi_i) + w / 2;
       phi = std::atan(l / r);
-    } else if (phi_i < -steer_angle_tolerance) {
+    } else if (phi_i < 0) {
       // right turn
       double r = l / std::tan(-phi_i) + w / 2;
       phi = std::atan(l / r);
