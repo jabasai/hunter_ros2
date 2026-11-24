@@ -79,6 +79,13 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_wheel_calibration test/test_wheel_calibration.cpp)
   target_include_directories(test_wheel_calibration PRIVATE include)
+
+  ament_add_gtest(test_steering_odometry test/test_steering_odometry.cpp
+    src/bicycle_model.cpp)
+  target_include_directories(test_steering_odometry PRIVATE include)
+  target_link_libraries(test_steering_odometry ugv_sdk ascent)
+  ament_target_dependencies(test_steering_odometry rclcpp tf2 tf2_ros std_msgs
+    nav_msgs sensor_msgs hunter_msgs tf2_geometry_msgs)
 endif()
 
 ament_package()

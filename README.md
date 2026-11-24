@@ -85,9 +85,13 @@ Always have your remote controller ready to take over the control whenever neces
 | Parameter | Meaning | Default |
 |---|---|---|
 | `linear_velocity_scale` | true speed = scale × reported speed | 1.0 |
-| `steering_angle_scale` | true central steering angle = scale × reported + offset | 1.0 |
+| `steering_angle_scale` | mean steering gain: true central steering angle = scale × gain × reported + offset | 1.0 |
 | `steering_angle_offset` | steering zero offset (rad, central angle) | 0.0 |
+| `steering_angle_left_right_asymmetry` | gain × (1 + a) for left turns, × (1 − a) for right turns | 0.0 |
+| `steering_angle_forward_reverse_asymmetry` | gain × (1 + a) driving forward (and standing), × (1 − a) in reverse | 0.0 |
 | `odom_reference_offset_x` | distance (m) of `base_frame` ahead of the rear-axle centre | 0.0 |
+
+A worn or unevenly stopped steering linkage, or a sensor zeroed off-centre, steers more to one side. Tyre slip and steering compliance differ between pulling and pushing the steered axle, so forward and reverse differ too. One scale and offset cannot represent either effect: the offset absorbs them in turns, and its value then depends on which manoeuvres were driven. The asymmetries are relative to the mean scale, so 0 is the symmetric model. Both factors are positive, so `/cmd_vel` inverts them exactly, and the steering stays continuous through zero.
 
 With the defaults the driver behaves exactly as before. When set:
 - **Odometry** integrates the true speed and steering, and the pose and twist are published for `base_frame`; the twist carries `vy = ω × offset`.

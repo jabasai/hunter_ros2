@@ -5,8 +5,18 @@
  *   steering angle, as estimated by jabas_calibration against RTK GNSS.
  *
  *   true speed              v = linear_velocity_scale * v_reported
- *   true central steering   d = steering_angle_scale * d_reported + steering_angle_offset
+ *   true central steering   d = steering_angle_scale * g * d_reported + steering_angle_offset
+ *                           g = (1 + steering_angle_left_right_asymmetry * sgn(d_reported))
+ *                             * (1 + steering_angle_forward_reverse_asymmetry * (v_reported < 0 ? -1 : 1))
  *   yaw rate                w = v * tan(d) / wheelbase
+ *
+ * The two asymmetries are small fractions (0 = symmetric, as before): the
+ * steering gain is (1 + a) times the mean for left turns and (1 - a) times
+ * for right turns, and likewise forward against reverse. A linkage with play
+ * or unequal stops, or a steering sensor zeroed off-centre, gives different
+ * left and right gains; tyre slip and steering compliance differ between
+ * pulling and pushing the steered axle. A single scale and offset cannot
+ * represent either, so the offset ends up absorbing them in turns.
  *
  * /hunter_status keeps the raw (reported) values; the odometry uses the true
  * ones, and velocity commands are mapped through the inverse so the robot
@@ -29,13 +39,16 @@ struct WheelCalibration {
   double linear_velocity_scale = 1.0;
   double steering_angle_scale = 1.0;
   double steering_angle_offset = 0.0;  // rad, central angle
+  double steering_angle_left_right_asymmetry = 0.0;     // + = left turns steer more
+  double steering_angle_forward_reverse_asymmetry = 0.0;  // + = forward steers more
   // Distance (m) of the published base frame ahead of the rear-axle centre,
   // the point the bicycle model integrates. 0 = publish the rear-axle pose.
   double odom_reference_offset_x = 0.0;
 
   bool IsIdentity() const {
     return linear_velocity_scale == 1.0 && steering_angle_scale == 1.0 &&
-           steering_angle_offset == 0.0;
+           steering_angle_offset == 0.0 && steering_angle_left_right_asymmetry == 0.0 &&
+           steering_angle_forward_reverse_asymmetry == 0.0;
   }
 
   // Rejects values that can only come from a typo or a failed calibration.
@@ -47,6 +60,12 @@ struct WheelCalibration {
       err << "steering_angle_scale " << steering_angle_scale << " outside (0.5, 1.5); ";
     if (!(std::fabs(steering_angle_offset) < 0.1))
       err << "steering_angle_offset " << steering_angle_offset << " rad outside (-0.1, 0.1); ";
+    if (!(std::fabs(steering_angle_left_right_asymmetry) < 0.1))
+      err << "steering_angle_left_right_asymmetry " << steering_angle_left_right_asymmetry
+          << " outside (-0.1, 0.1); ";
+    if (!(std::fabs(steering_angle_forward_reverse_asymmetry) < 0.1))
+      err << "steering_angle_forward_reverse_asymmetry " << steering_angle_forward_reverse_asymmetry
+          << " outside (-0.1, 0.1); ";
     if (!(std::fabs(odom_reference_offset_x) < 2.0))
       err << "odom_reference_offset_x " << odom_reference_offset_x << " m outside (-2, 2); ";
     if (!err.str().empty())
@@ -55,14 +74,19 @@ struct WheelCalibration {
 
   // reported -> true
   double TrueSpeed(double v_reported) const { return linear_velocity_scale * v_reported; }
-  double TrueSteering(double central_reported) const {
-    return steering_angle_scale * central_reported + steering_angle_offset;
+  // v: speed (reported or true, only its sign is used; 0 counts as forward)
+  double TrueSteering(double central_reported, double v) const {
+    return Gain(central_reported > 0 ? 1.0 : central_reported < 0 ? -1.0 : 0.0, v) * central_reported +
+           steering_angle_offset;
   }
 
   // true -> value to command (inverse of the above)
   double ReportedSpeed(double v_true) const { return v_true / linear_velocity_scale; }
-  double ReportedSteering(double central_true) const {
-    return (central_true - steering_angle_offset) / steering_angle_scale;
+  // Exact inverse: the gain is positive (|asymmetries| < 0.1), so the
+  // reported angle has the sign of central_true - offset.
+  double ReportedSteering(double central_true, double v) const {
+    const double d = central_true - steering_angle_offset;
+    return d / Gain(d > 0 ? 1.0 : d < 0 ? -1.0 : 0.0, v);
   }
 
   // Central steering angle (in the chassis' reported units, clamped to
@@ -78,7 +102,14 @@ struct WheelCalibration {
       central_true *= sign;
     }
     // C++14 (no std::clamp)
-    return std::max(-max_central, std::min(max_central, ReportedSteering(central_true)));
+    return std::max(-max_central, std::min(max_central, ReportedSteering(central_true, v)));
+  }
+
+ private:
+  // steering scale for a turn side (+1 left, -1 right, 0 straight) and driving direction
+  double Gain(double side, double v) const {
+    return steering_angle_scale * (1.0 + steering_angle_left_right_asymmetry * side) *
+           (1.0 + steering_angle_forward_reverse_asymmetry * (v < 0 ? -1.0 : 1.0));
   }
 };
 
