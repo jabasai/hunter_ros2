@@ -74,7 +74,9 @@ def generate_launch_description():
 				default_value='/robot_configs/ros_params/hunter_base.yaml'),
 			description='ROS parameter file with the per-robot wheel-odometry '
 			'calibration (linear_velocity_scale, steering_angle_scale, '
-			'steering_angle_offset, odom_reference_offset_x); ignored if missing',
+			'steering_angle_offset, steering_angle_left_right_asymmetry, '
+			'steering_angle_forward_reverse_asymmetry, odom_reference_offset_x); '
+			'ignored if missing',
 		),
 		OpaqueFunction(function=_hunter_base_node),
 	])

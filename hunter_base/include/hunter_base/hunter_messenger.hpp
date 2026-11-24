@@ -403,7 +403,7 @@ class HunterMessenger {
     // reported -> true speed and central steering angle (identity by default)
     double linear_speed_ = calibration_.TrueSpeed(msg.linear_velocity);
     double steering_angle_ =
-        calibration_.TrueSteering(ConvertInnerAngleToCentral(msg.steering_angle));
+        calibration_.TrueSteering(ConvertInnerAngleToCentral(msg.steering_angle), msg.linear_velocity);
 
     asc::state_t state =
       model_.Propagate({position_x_, position_y_, theta_},

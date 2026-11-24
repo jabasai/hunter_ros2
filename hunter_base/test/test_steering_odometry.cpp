@@ -77,7 +77,7 @@ struct StandInHunter {
       central = std::copysign(std::atan(kL / r), inner_reported);
     }
     const double v = chassis.TrueSpeed(v_reported);
-    const double yaw_rate = v * std::tan(chassis.TrueSteering(central)) / kL;
+    const double yaw_rate = v * std::tan(chassis.TrueSteering(central, v_reported)) / kL;
     const double dyaw = yaw_rate * dt;
     if (dyaw == 0.0) {
       x += v * dt * std::cos(yaw);
@@ -274,4 +274,23 @@ TEST_F(SteeringOdometryTest, CalibratedCommandAndOdometryFollowWideCurve) {
   ExpectOdometryFollowsChassis(r);
 
   ExpectOdometryFollowsChassis(Drive(150.0, 1.0, 20.0, Hunter002()));
+}
+
+// A chassis whose steering gain differs left/right and forward/reverse
+// (hunter_001, jabas_calibration 2026-11-24): commands still realise the
+// requested curvature and the odometry follows, in all four cases.
+TEST_F(SteeringOdometryTest, AsymmetricCalibrationFollowsAllFourCases) {
+  WheelCalibration c = Hunter002();
+  c.steering_angle_offset = 0.005028;
+  c.steering_angle_left_right_asymmetry = 0.01572;
+  c.steering_angle_forward_reverse_asymmetry = -0.01212;
+  for (const Curve k : {Curve{5.0, 1.0, 10.0}, Curve{-5.0, 1.0, 10.0},
+                        Curve{5.0, -1.0, 10.0}, Curve{-5.0, -1.0, 10.0}}) {
+    SCOPED_TRACE("radius " + std::to_string(k.radius) + " m, speed " +
+                 std::to_string(k.speed) + " m/s");
+    const auto r = Drive(k.radius, k.speed, k.distance, c);
+    // 10 m on a 5 m radius: 2 rad, short only by the 1 mrad / 1 mm/s CAN truncation (< 1 %)
+    EXPECT_NEAR(std::fabs(r.base_yaw), k.distance / std::fabs(k.radius), 0.02);
+    ExpectOdometryFollowsChassis(r);
+  }
 }

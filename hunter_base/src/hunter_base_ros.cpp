@@ -31,6 +31,8 @@ HunterBaseRos::HunterBaseRos(std::string node_name)
 	this->declare_parameter("linear_velocity_scale", rclcpp::ParameterValue(1.0));
 	this->declare_parameter("steering_angle_scale", rclcpp::ParameterValue(1.0));
 	this->declare_parameter("steering_angle_offset", rclcpp::ParameterValue(0.0));
+	this->declare_parameter("steering_angle_left_right_asymmetry", rclcpp::ParameterValue(0.0));
+	this->declare_parameter("steering_angle_forward_reverse_asymmetry", rclcpp::ParameterValue(0.0));
 	this->declare_parameter("odom_reference_offset_x", rclcpp::ParameterValue(0.0));
 
 	LoadParameters();
@@ -54,6 +56,10 @@ void HunterBaseRos::LoadParameters() {
 																 calibration_.steering_angle_scale, 1.0);
 	this->get_parameter_or<double>("steering_angle_offset",
 																 calibration_.steering_angle_offset, 0.0);
+	this->get_parameter_or<double>("steering_angle_left_right_asymmetry",
+																 calibration_.steering_angle_left_right_asymmetry, 0.0);
+	this->get_parameter_or<double>("steering_angle_forward_reverse_asymmetry",
+																 calibration_.steering_angle_forward_reverse_asymmetry, 0.0);
 	this->get_parameter_or<double>("odom_reference_offset_x",
 																 calibration_.odom_reference_offset_x, 0.0);
 	// fail at startup on an implausible calibration rather than drive with it
@@ -77,6 +83,8 @@ void HunterBaseRos::LoadParameters() {
 	std::cout << "    linear_velocity_scale: " << calibration_.linear_velocity_scale << std::endl;
 	std::cout << "    steering_angle_scale: " << calibration_.steering_angle_scale << std::endl;
 	std::cout << "    steering_angle_offset (rad): " << calibration_.steering_angle_offset << std::endl;
+	std::cout << "    steering_angle_left_right_asymmetry: " << calibration_.steering_angle_left_right_asymmetry << std::endl;
+	std::cout << "    steering_angle_forward_reverse_asymmetry: " << calibration_.steering_angle_forward_reverse_asymmetry << std::endl;
 	std::cout << "    odom_reference_offset_x (m): " << calibration_.odom_reference_offset_x << std::endl;
 	std::cout << "----------------------------" << std::endl;
 }
